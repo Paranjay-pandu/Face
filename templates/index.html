@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Analysis</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            background-color: #f4f4f4;
+        }
+
+        header {
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            padding: 1rem;
+        }
+
+        .nav-title {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+        }
+
+        button {
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 2rem;
+        }
+
+        .video-container {
+            width: 640px;
+            height: 480px;
+            background-color: #000;
+        }
+
+        video {
+            width: 100%;
+            height: auto;
+        }
+
+        .results {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            width: 100%;
+            max-width: 300px;
+        }
+
+        input {
+            padding: 0.5rem;
+            font-size: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        #status {
+            margin-top: 1rem;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .video-container, .results {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 class="nav-title">Face Characteristics Prediction</h1>
+        <div class="controls">
+            <button id="captureBtn">Capture</button>
+            <button id="stopBtn">Stop</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="video-container">
+            <video id="video" autoplay></video>
+        </div>
+        <div class="results">
+            <h1>Predictions:</h1>
+            <input type="text" id="age" placeholder="Age" readonly>
+            <input type="text" id="ageRange" placeholder="Age Range" readonly>
+            <input type="text" id="gender" placeholder="Gender" readonly>
+            <input type="text" id="emotion" placeholder="Emotion" readonly>
+            <input type="text" id="race" placeholder="Race" readonly>
+        </div>
+    </main>
+
+    <div id="status"></div>
+
+    <script>
+        const video = document.getElementById('video');
+        const captureBtn = document.getElementById('captureBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusDiv = document.getElementById('status');
+        let stream = null;
+        let isCapturing = false;
+        let captureInterval = null;
+
+        async function startVideo() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                statusDiv.textContent = 'Camera started successfully';
+            } catch (err) {
+                console.error("Error accessing the camera:", err);
+                statusDiv.textContent = 'Error accessing the camera';
+            }
+        }
+
+        function stopVideo() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                stream = null;
+            }
+            if (captureInterval) {
+                clearInterval(captureInterval);
+                captureInterval = null;
+            }
+            isCapturing = false;
+            statusDiv.textContent = 'Camera stopped';
+        }
+
+        function captureAndAnalyze() {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const imageData = canvas.toDataURL('image/jpeg');
+            
+            fetch('/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ image: imageData }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    statusDiv.textContent = data.error;
+                } else {
+                    document.getElementById('age').value = data.age;
+                    document.getElementById('ageRange').value = data.age_range;
+                    document.getElementById('gender').value = data.gender;
+                    document.getElementById('emotion').value = data.emotion;
+                    document.getElementById('race').value = data.race;
+                    statusDiv.textContent = 'Analysis complete';
+                }
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+                statusDiv.textContent = 'An error occurred during analysis';
+            });
+        }
+
+        captureBtn.addEventListener('click', () => {
+            if (!stream) {
+                startVideo().then(() => {
+                    isCapturing = true;
+                    captureInterval = setInterval(captureAndAnalyze, 1000); // Capture every second
+                    statusDiv.textContent = 'Capturing and analyzing...';
+                });
+            } else if (!isCapturing) {
+                isCapturing = true;
+                captureInterval = setInterval(captureAndAnalyze, 1000); // Capture every second
+                statusDiv.textContent = 'Capturing and analyzing...';
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            stopVideo();
+        });
+    </script>
+</body>
+</html>
